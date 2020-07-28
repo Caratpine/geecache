@@ -1,4 +1,4 @@
-package geecache
+package src
 
 import (
 	"fmt"
@@ -34,8 +34,8 @@ func NewGroup(name string, cacheBytes int64, getter Getter) *Group {
 	mu.Lock()
 	defer mu.Unlock()
 	g := &Group{
-		name: name,
-		getter: getter,
+		name:      name,
+		getter:    getter,
 		mainCache: cache{cacheBytes: cacheBytes},
 	}
 	groups[name] = g
@@ -70,15 +70,14 @@ func (g *Group) load(key string) (bv ByteView, err error) {
 func (g *Group) getLocally(key string) (bv ByteView, err error) {
 	var (
 		bytes []byte
-		bv ByteView
 	)
 	if bytes, err = g.getter.Get(key); err != nil {
 		log.Printf("Group.getLocally(%s) error(%v)\n", key, err)
 		return
 	}
-	bv = ByteView{b:cloneBytes(bytes)}
-
-
+	bv = ByteView{b: cloneBytes(bytes)}
+	g.populateCache(key, bv)
+	return
 }
 
 func (g *Group) populateCache(key string, bv ByteView) {

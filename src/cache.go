@@ -1,9 +1,9 @@
-package geecache
+package src
 
 import (
 	"sync"
 
-	"geecache/lru"
+	"github.com/caratpine/geecache/src/lru"
 )
 
 type cache struct {
@@ -29,7 +29,7 @@ func (c *cache) get(key string) (bv ByteView, ok bool) {
 	}
 	if v, ok := c.lru.Get(key); ok {
 		bv, _ = v.(ByteView)
-		return
+		return bv, ok
 	}
 	return
 }
