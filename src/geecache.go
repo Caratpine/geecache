@@ -10,6 +10,7 @@ type Group struct {
 	name      string
 	getter    Getter
 	mainCache cache
+	peers     PeerPicker
 }
 
 type Getter interface {
@@ -23,7 +24,7 @@ func (f GetterFunc) Get(key string) ([]byte, error) {
 }
 
 var (
-	mu sync.RWMutex
+	mu     sync.RWMutex
 	groups = make(map[string]*Group)
 )
 
@@ -49,6 +50,13 @@ func GetGroup(name string) *Group {
 	return g
 }
 
+func (g *Group) RegisterPeers(peers PeerPicker) {
+	if g.peers != nil {
+		panic("RegisterPeerPicker called more than once.")
+	}
+	g.peers = peers
+}
+
 func (g *Group) Get(key string) (bv ByteView, err error) {
 	var ok bool
 	if key == "" {
@@ -64,7 +72,26 @@ func (g *Group) Get(key string) (bv ByteView, err error) {
 }
 
 func (g *Group) load(key string) (bv ByteView, err error) {
+	if g.peers != nil {
+		if peer, ok := g.peers.PickPeer(key); ok {
+			if bv, err = g.getFromPeer(peer, key); err == nil {
+				return
+			}
+			log.Println("[GeeCache] Failed to get from peer", err)
+		}
+	}
 	return g.getLocally(key)
+}
+
+func (g *Group) getFromPeer(peer PeerGetter, key string) (bv ByteView, err error) {
+	var (
+		bs []byte
+	)
+	if bs, err = peer.Get(g.name, key); err != nil {
+		return
+	}
+	bv.b = bs
+	return
 }
 
 func (g *Group) getLocally(key string) (bv ByteView, err error) {
