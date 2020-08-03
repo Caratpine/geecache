@@ -2,6 +2,7 @@ package src
 
 import (
 	"fmt"
+	"github.com/caratpine/geecache/src/singleflight"
 	"log"
 	"sync"
 )
@@ -11,6 +12,7 @@ type Group struct {
 	getter    Getter
 	mainCache cache
 	peers     PeerPicker
+	loader    *singleflight.Group
 }
 
 type Getter interface {
@@ -72,15 +74,21 @@ func (g *Group) Get(key string) (bv ByteView, err error) {
 }
 
 func (g *Group) load(key string) (bv ByteView, err error) {
-	if g.peers != nil {
-		if peer, ok := g.peers.PickPeer(key); ok {
-			if bv, err = g.getFromPeer(peer, key); err == nil {
-				return
+	res, err := g.loader.Do(key, func() (interface{}, error) {
+		if g.peers != nil {
+			if peer, ok := g.peers.PickPeer(key); ok {
+				if bv, err = g.getFromPeer(peer, key); err == nil {
+					return bv, nil
+				}
+				log.Println("[GeeCache] Failed to get from peer", err)
 			}
-			log.Println("[GeeCache] Failed to get from peer", err)
 		}
+		return g.getLocally(key)
+	})
+	if err == nil {
+		bv = res.(ByteView)
 	}
-	return g.getLocally(key)
+	return
 }
 
 func (g *Group) getFromPeer(peer PeerGetter, key string) (bv ByteView, err error) {
